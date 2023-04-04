@@ -8,30 +8,28 @@ module.exports = {
   description: "Shows all commands",
   usage: "[command name]",
   execute(message, args) {
-    const data = [];
     const { commands } = message.client;
-
     /**
      * If the user wants all the commands
      */
     if (!args.length) {
-      data.push("Here's a list of all my commands:");
+      let reply = "Here's a list of all my commands:\n";
       let cmds = "";
       commands.forEach(command => {
         cmds += (`\`${PREFIX}${command.name}\``).padEnd(6, '\t');
         if(command.description) cmds += `\t*${command.description}*\n`
       });
-      data.push(cmds);
-      data.push(
-        `Try \`${PREFIX}help [command name]\` to get info on a specific command!`
-      );
+      cmds += `Try \`${PREFIX}help [command name]\` to get info on a specific command!`
 
-      return message.channel.send(data, { split: true }).catch((error) => {
+      reply += cmds;
+    
+      message.channel.send(reply, { split: true }).catch((error) => {
           console.error(error);
           message.reply(
             "Houston, we have a problem!"
           );
         });
+      return;
     }
 
     /**
@@ -46,16 +44,16 @@ module.exports = {
       return message.reply("Uh Oh! Not a valid command");
     }
 
-    data.push(`**Name:** ${command.name}`);
-
+    let reply = `**Name:** ${command.name}\n`;
     if (command.description)
-      data.push(`**Description:** *${command.description}*`);
-    if (command.usage)
-      data.push(`**Usage:** \`${PREFIX}${command.name} ${command.usage}\``);
+      reply += `**Description:** *${command.description}*\n`;
 
-    data.push(`**Cooldown:** ${command.cooldown || 3} second(s)`);
+      if (command.usage)
+      reply += `**Usage:** \`${PREFIX}${command.name} ${command.usage}\`\n`;
 
-    message.channel.send(data, { split: true });
+    reply += `**Cooldown:** ${command.cooldown || 3} second(s)\n`;
+
+    message.channel.send(reply, { split: true });
 
   },
 };

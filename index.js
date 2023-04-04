@@ -12,13 +12,21 @@
 require("dotenv").config();
 const fs = require("fs");
 const mongoose = require("mongoose");
-const { Client, MessageEmbed, Collection } = require("discord.js");
+const {
+  Client,
+  Collection,
+  IntentsBitField,
+  Events,
+  ChannelType,
+} = require("discord.js");
+const { EmbedBuilder } = require("discord.js");
 const schedule = require("node-schedule");
 const standupModel = require("./models/standup.model");
+const { exit } = require("process");
 
 const PREFIX = "!";
 
-const standupIntroMessage = new MessageEmbed()
+const standupIntroMessage = new EmbedBuilder()
   .setColor("#ff9900")
   .setTitle("Daily Standup")
   .setURL("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
@@ -28,31 +36,33 @@ const standupIntroMessage = new MessageEmbed()
   .addFields(
     {
       name: "Introduction",
-      value: `Hi! I'm Stan D. Upbot and I will be facilitating your daily standups from now on.\nTo view all available commands, try \`${PREFIX}help\`.`,
+      value: `Hi! I'm Hal and I will be facilitating your daily standups from now on.\nTo view all available commands, try \`${PREFIX}help\`.`,
     },
     {
       name: "How does this work?",
-      value: `Anytime before the standup time \`10:30 AM EST\`, members would private DM me with the command \`${PREFIX}show\`, I will present the standup prompt and they will type their response using the command \`${PREFIX}reply @<optional_serverId> [your-message-here]\`. I will then save their response in my *secret special chamber of data*, and during the designated standup time, I would present everyone's answer to \`#daily-standups\`.`,
+      value: `Anytime before the standup time \`12:00 PM Buenos Aires Time\`, members would private DM me with the command \`${PREFIX}show\`, I will present the standup prompt and they will type their response using the command \`${PREFIX}reply @<optional_serverId> [your-message-here]\`. I will then save their response in my *secret special chamber of data*, and during the designated standup time, I would present everyone's answer to \`#daily-standups\`.`,
     },
     {
       name: "Getting started",
       value: `*Currently*, there are no members in the standup! To add a member try \`${PREFIX}am <User>\`.`,
     }
   )
-  .setFooter(
-    "https://github.com/navn-r/standup-bot",
-    "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"
-  )
+  .setFooter({
+    text: "https://github.com/szavalia/standup-bot",
+    iconURL:
+      "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+  })
   .setTimestamp();
 
-const dailyStandupSummary = new MessageEmbed()
+const dailyStandupSummary = new EmbedBuilder()
   .setColor("#ff9900")
   .setTitle("Daily Standup")
   .setURL("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-  .setFooter(
-    "https://github.com/navn-r/standup-bot",
-    "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"
-  )
+  .setFooter({
+    text: "https://github.com/szavalia/standup-bot",
+    iconURL:
+      "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+  })
   .setTimestamp();
 
 // lists .js files in commands dir
@@ -61,7 +71,15 @@ const commandFiles = fs
   .filter((file) => file.endsWith(".js"));
 
 // init bot client with a collection of commands
-const bot = new Client();
+const bot = new Client({
+  intents: [
+    IntentsBitField.Flags.Guilds,
+    IntentsBitField.Flags.GuildMembers,
+    IntentsBitField.Flags.GuildMessages,
+    IntentsBitField.Flags.MessageContent,
+    IntentsBitField.Flags.DirectMessages,
+  ],
+});
 bot.commands = new Collection();
 
 // Imports the command file + adds the command to the bot commands collection
@@ -77,18 +95,25 @@ mongoose
     useCreateIndex: true,
     useUnifiedTopology: true,
   })
-  .catch((e) => console.error(e));
+  .catch((error) => {
+    console.log("Error connecting to MongoDB: ", error);
+    exit(1);
+  });
 
-mongoose.connection.once("open", () => console.log("mongoDB connected"));
+mongoose.connection
+  .once("open", () => console.log("MongoDB connected"))
+  .catch((error) => console.log(error));
 
-bot.once("ready", () => console.log("Discord Bot Ready"));
+bot.once(Events.ClientReady, () => console.log("Daily Bot Ready"));
 
 // when a user enters a command
-bot.on("message", async (message) => {
+bot.on(Events.MessageCreate, async (message) => {
   if (!message.content.startsWith(PREFIX) || message.author.bot) return;
 
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
   const commandName = args.shift().toLowerCase();
+
+  console.log("Command: " + commandName + " Args: " + args);
 
   if (!bot.commands.has(commandName)) return;
 
@@ -97,24 +122,29 @@ bot.on("message", async (message) => {
 
   const command = bot.commands.get(commandName);
 
-  if (command.guildOnly && message.channel.type === "dm") {
+  if (command.guildOnly && message.channel.type === ChannelType.DM) {
     return message.channel.send("Hmm, that command cannot be used in a dm!");
   }
+  console.log("Proceeding to execute command...");
 
   try {
     await command.execute(message, args);
   } catch (error) {
-    console.error(error);
+    console.error("Error executing command: " + error);
     message.channel.send(`Error 8008135: Something went wrong!`);
   }
 });
 
-bot.on("guildCreate", async (guild) => {
+bot.on(Events.GuildCreate, async (guild) => {
+  console.log("Creating new channel");
   // creates the text channel
-  const channel = await guild.channels.create("daily-standups", {
-    type: "text",
-    topic: "Scrum Standup Meeting Channel",
+  const channel = await guild.channels.create({
+    name: "daily-standups",
+    type: ChannelType.GuildText,
+    reason: "Scrum Standup Meeting Channel",
   });
+
+  console.log("Channel created");
 
   // creates the database model
   const newStandup = new standupModel({
@@ -129,11 +159,15 @@ bot.on("guildCreate", async (guild) => {
     .then(() => console.log("Howdy!"))
     .catch((err) => console.error(err));
 
-  await channel.send(standupIntroMessage);
+  console.log("Sending welcome message");
+
+  await channel.send({ embeds: [standupIntroMessage] });
 });
 
 // delete the mongodb entry
-bot.on("guildDelete", (guild) => {
+bot.on(Events.GuildDelete, (guild) => {
+  console.log("Channel was deleted!");
+
   standupModel
     .findByIdAndDelete(guild.id)
     .then(() => console.log("Peace!"))
@@ -141,10 +175,10 @@ bot.on("guildDelete", (guild) => {
 });
 
 /**
- * Cron Job: 10:30:00 AM EST - Go through each standup and output the responses to the channel
+ * Cron Job: 12:00 PM Buenos Aires local time - Go through each standup and output the responses to the channel
  */
 let cron = schedule.scheduleJob(
-  { hour: 15, minute: 30, dayOfWeek: new schedule.Range(1, 5) },
+  { hour: 12, minute: 0, dayOfWeek: new schedule.Range(1, 5) },
   (time) => {
     console.log(`[${time}] - CRON JOB START`);
     standupModel
@@ -167,13 +201,13 @@ let cron = schedule.scheduleJob(
           let missingString = "Hooligans: ";
           if (!missingMembers.length) missingString += ":man_shrugging:";
           else missingMembers.forEach((id) => (missingString += `<@${id}> `));
-          bot.channels.cache
-            .get(standup.channelId)
-            .send(
-              new MessageEmbed(dailyStandupSummary)
-                .setDescription(missingString)
-                .addFields(memberResponses)
-            );
+
+          let channel = bot.channels.cache.get(standup.channelId);
+          let dailyResponsesEmbed = new EmbedBuilder(dailyStandupSummary)
+          .setDescription(missingString)
+          .addFields(memberResponses);
+          channel.send({ embeds: dailyResponsesEmbed});
+
           standup
             .save()
             .then(() =>

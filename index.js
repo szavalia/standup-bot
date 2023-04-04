@@ -110,10 +110,12 @@ bot.once(Events.ClientReady, () => console.log("Daily Bot Ready"));
 bot.on(Events.MessageCreate, async (message) => {
   if (!message.content.startsWith(PREFIX) || message.author.bot) return;
 
+  console.log("Message received: " + message.channel.name);
+
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
   const commandName = args.shift().toLowerCase();
 
-  console.log("Command: " + commandName + " Args: " + args);
+  console.log("Command: " + commandName);
 
   if (!bot.commands.has(commandName)) return;
 
@@ -198,7 +200,7 @@ let cron = schedule.scheduleJob(
               missingMembers.push(id);
             }
           });
-          let missingString = "Hooligans: ";
+          let missingString = "MIA: ";
           if (!missingMembers.length) missingString += ":man_shrugging:";
           else missingMembers.forEach((id) => (missingString += `<@${id}> `));
 
@@ -206,7 +208,7 @@ let cron = schedule.scheduleJob(
           let dailyResponsesEmbed = new EmbedBuilder(dailyStandupSummary)
           .setDescription(missingString)
           .addFields(memberResponses);
-          channel.send({ embeds: dailyResponsesEmbed});
+          channel.send({ embeds: [dailyResponsesEmbed]});
 
           standup
             .save()
